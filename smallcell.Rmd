@@ -1,0 +1,123 @@
+---
+title: "Small Cell"
+author: "Karl Evans"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+OUTCOMES
+Overall Survival &
+Progression Free Survival
+
+1. Kaplan-Meier
+2. Cox’s Proportional Hazard model 
+
+intervention:******
+
+```{r,echo = FALSE, message=FALSE}
+#install.packages("readxl")
+#install.packages("ggpubr")
+#install.packages("dplyr")
+#library("tidyverse")
+library("readxl")
+library("dplyr")
+library(lubridate)
+smallcell<-read.csv("../Audit-Table 1.csv")
+```
+
+
+```{r, echo = FALSE, message=FALSE}
+# Cleaning and Prep
+#install.packages("janitor")
+library("janitor")
+smallcell <- smallcell %>%
+  clean_names()
+```
+
+```{r, echo = FALSE, message=FALSE}
+#Column formats
+smallcell$dod<-as.Date(smallcell$dod, format = "%d/%m/%Y")
+#smallcell$dod<-as.Date(smallcell$dod, origin="1899-12-30")
+smallcell$date_of_progression<-as.Date(smallcell$date_of_progression, format = "%d/%m/%Y")
+smallcell$date_last_seen<-as.Date(smallcell$date_last_seen, format = "%d/%m/%Y")
+smallcell$date_of_diagnosis<-as.Date(smallcell$date_of_diagnosis, format = "%d/%m/%Y")
+
+#smallcell$date_of_progression<-as.Date(smallcell$date_of_progression, origin="1899-12-30")
+#summary(smallcell)
+
+library(lubridate)
+#smallcell<-smallcell %>% mutate_if(is.POSIXt, as.Date)
+#smallcell<-smallcell %>% mutate(across(6:14, as.factor))
+#smallcell<-smallcell %>% mutate(across(16:18, as.factor))
+smallcell$cycles_of_treatment<-as.numeric(smallcell$cycles_of_treatment)
+#smallcell<-smallcell %>% mutate(across(23:38, as.factor))
+#smallcell<-smallcell %>% mutate(across(43:52, as.factor))
+#smallcell$cancer_type<-as.factor(smallcell$cancer_type)
+#summary(smallcell)
+```
+
+```{r, echo = FALSE}
+library("stringr")
+smallcell <- smallcell %>% mutate(num_cycles = ifelse(cycles_of_treatment<6, "<6", ">=6"))
+smallcell <- smallcell %>% mutate(cens = ifelse(is.na(dod), 0, 1))
+smallcell <- smallcell %>% mutate(cens2 = ifelse(is.na(dod), 1, 0))
+smallcell <- smallcell %>% mutate(symptoms = ifelse(str_detect(toxicities_descriptiom, "sympt"), 1, 0))
+# Set date of last follow up as either dod, or if alive, date of last cycle platinum
+smallcell<-smallcell %>% 
+  mutate(date_last_followup = coalesce(dod, date_last_seen))
+#smallcell$date_last_followup<-as.Date(smallcell$date_last_followup, origin="1899-12-30")
+smallcell$time<-smallcell$date_last_followup-smallcell$date_of_diagnosis
+
+m<-subset(smallcell, treatment_y_n=="Y")
+median(m$cycles_of_treatment)
+m2<-subset(smallcell, treatment_y_n=="N")
+median(m2$cycles_of_treatment)
+```
+
+
+```{r, echo=FALSE, message=FALSE}
+# Data Prep
+library(survival)
+library(survminer)
+library(dplyr)
+smallcellsurv<-smallcell %>%
+  select(num_cycles, cens, cens2, date_last_followup, date_of_diagnosis, date_of_progression, treatment_y_n, symptom)
+smallcellsurv$num_cycles<-as.factor(smallcellsurv$num_cycles)
+smallcellsurv$time<-smallcell$date_last_followup-smallcell$date_of_diagnosis
+smallcellsurv$time_no_prog<-smallcell$date_of_progression-smallcell$date_of_diagnosis
+smallcellsurv <- rename(smallcellsurv,c('treatment'='treatment_y_n'))
+
+#glimpse(smallcellsurv)
+#summary(smallcellsurv)
+```
+
+
+```{r,echo = FALSE}
+# More Data Cleaning
+library(tidyr)
+smallcellsurv<-as.data.frame(smallcellsurv)
+#smallcellsurv<-smallcellsurv[smallcellsurv$treatment_y_n != "n/a", ]
+smallcellsurv<- filter(smallcellsurv, treatment!="n/a")
+smallcellsurv$treatment[smallcellsurv$treatment=="N But had palliative RT "]<-"N"
+#smallcellsurv$treatment <- str_replace(smallcellsurv$treatment, "N But had palliative RT", "N")
+smallcellsurv$treatment<-as.factor(smallcellsurv$treatment)
+#smallcellsurv$treatment_y_n <-droplevels(smallcellsurv$treatment_y_n)
+smallcellsurv$num_cycles<-as.factor(smallcellsurv$num_cycles)
+#summary(smallcellsurv)
+```
+
+
+```{r, echo = FALSE}
+# And More processing
+#glimpse(smallcellsurv)
+smallcellsurv$time<-as.numeric(smallcellsurv$time)/30
+smallcellsurv$time_no_prog<-as.numeric(smallcellsurv$time_no_prog)/30
+smallcellsurv<-smallcellsurv[smallcellsurv$time >0, ]
+#smallcellsurv <- rename(smallcellsurv,c('treatment'='treatment_y_n'))
+smallcellsurv<-as.data.frame(smallcellsurv)
+smallcellsurv$symptom<-as.factor(smallcellsurv$symptom)
+summary(smallcellsurv)
+```
