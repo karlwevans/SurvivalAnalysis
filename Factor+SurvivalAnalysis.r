@@ -1,3 +1,16 @@
+library(psych)
+library(survival)
+#library(survminer)
+library(readr)
+library(broom)
+#library(GPArotation)
+
+# Load the factor_data.csv
+factor_data <- read_csv("factor_data.csv")
+
+# Load the survival_data.csv
+survival_data <- read_csv("survival_data.csv")
+
 # 1. Correlation
 # find correlations
 cor_factor_data<-cor(factor_data, use="pairwise.complete.obs")
